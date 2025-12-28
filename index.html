@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="古典探求">
+    <meta name="description" content="古典文学を楽しく学べる学習アプリ。全59問の問題でしっかり学習！">
+    
+    <title>古典探求 学習アプリ</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- アイコン -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overscroll-behavior: none;
+            background: linear-gradient(to bottom right, #eff6ff, #e0e7ff);
+            min-height: 100vh;
+        }
+        
+        /* スクロールバーを非表示 */
+        ::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+        }
+        
+        /* ボタンのタップ効果 */
+        .tap-effect:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+        
+        /* スムーズなトランジション */
+        * {
+            transition: all 0.2s ease;
+        }
+        
+        /* インストールバナー */
+        .install-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to right, #6366f1, #8b5cf6);
+            color: white;
+            padding: 16px;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+            to {
+                transform: translateY(0);
+            }
+        }
+        
+        /* ローディング画面 */
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to bottom right, #6366f1, #8b5cf6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- ローディング画面 -->
+    <div id="loading" class="loading-screen">
+        <div class="spinner mb-6"></div>
+        <h2 class="text-2xl font-bold mb-2">古典探求</h2>
+        <p class="text-sm opacity-80">読み込み中...</p>
+    </div>
+    
+    <!-- アプリ本体 -->
+    <div id="root"></div>
+    
+    <!-- インストールバナー（表示/非表示はJSで制御） -->
+    <div id="install-banner" class="install-banner" style="display: none;">
+        <p class="text-sm font-semibold mb-2">📱 ホーム画面に追加してアプリとして使おう！</p>
+        <div class="flex gap-2 justify-center">
+            <button id="install-button" class="bg-white text-indigo-600 px-6 py-2 rounded-lg font-bold tap-effect">
+                追加する
+            </button>
+            <button id="dismiss-install" class="bg-indigo-700 text-white px-6 py-2 rounded-lg tap-effect">
+                後で
+            </button>
+        </div>
+    </div>
+    
+    <!-- 問題データ -->
+    <script src="questionData.js"></script>
+    
+    <!-- メインアプリ -->
+    <script type="text/babel">
+        const { useState, useCallback, useEffect } = React;
+
+        const StudyApp = () => {
+          // ===== 状態管理 =====
+          const [screen, setScreen] = useState('menu');
+          const [selectedCategory, setSelectedCategory] = useState(null);
+          const [currentSubQIndex, setCurrentSubQIndex] = useState(0);
+          const [answers, setAnswers] = useState({});
+          const [showHint, setShowHint] = useState(false);
+          const [showExplanation, setShowExplanation] = useState(false);
+          const [submitted, setSubmitted] = useState(false);
+          const [allResults, setAllResults] = useState(() => {
+            const saved = localStorage.getItem('studyResults');
+            return saved ? JSON.parse(saved) : {};
+          });
+          const [aiAnalysis, setAiAnalysis] = useState('');
+          const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+          
+          // 行動追跡用の状態
+          const [questionStartTime, setQuestionStartTime] = useState(Date.now());
+          const [changeCount, setChangeCount] = useState(0);
+          const [hintViewTime, setHintViewTime] = useState(null);
+          const [explanationViewTime, setExplanationViewTime] = useState(null);
+
+          // 結果をローカルストレージに保存
+          useEffect(() => {
+            if (Object.keys(allResults).length > 0) {
+              localStorage.setItem('studyResults', JSON.stringify(allResults));
+            }
+          }, [allResults]);
+
+          // ===== ユーティリティ関数 =====
+          
+          const checkAnswer = useCallback((userAns, correctAns) => {
+            if (!userAns) return false;
+            if (Array.isArray(correctAns)) {
+              return correctAns.some(ans => 
+                userAns.toLowerCase().trim() === ans.toLowerCase().trim()
+              );
+            }
+            return userAns.toLowerCase().trim() === correctAns.toLowerCase().trim();
+          }, []);
+
+          const currentCategory = window.categories?.find(c => c.id === selectedCategory);
+          const currentQuestion = currentCategory?.questions[currentSubQIndex];
+          const userAnswer = answers[currentSubQIndex]?.answer;
+          const isSubmitted = answers[currentSubQIndex]?.submitted;
+          const isCorrect = answers[currentSubQIndex]?.correct;
+
+          // ===== イベントハンドラー =====
+          
+          const handleAnswer = useCallback((value) => {
+            const currentAnswer = answers[currentSubQIndex]?.answer;
+            const newChangeCount = currentAnswer && currentAnswer !== value ? changeCount + 1 : changeCount;
+            setChangeCount(newChangeCount);
+            
+            setAnswers(prev => ({
+              ...prev,
+              [currentSubQIndex]: {
+                ...prev[currentSubQIndex],
+                answer: value,
+                changes: newChangeCount
+              }
+            }));
+          }, [answers, currentSubQIndex, changeCount]);
+
+          const handleHintToggle = useCallback(() => {
+            if (!showHint && hintViewTime === null) {
+              const timeUntilHint = Math.round((Date.now() - questionStartTime) / 1000);
+              setHintViewTime(timeUntilHint);
+            }
+            setShowHint(prev => !prev);
+          }, [showHint, hintViewTime, questionStartTime]);
+
+          const handleExplanationToggle = useCallback(() => {
+            if (!showExplanation && explanationViewTime === null) {
+              const timeUntilExplanation = Math.round((Date.now() - questionStartTime) / 1000);
+              setExplanationViewTime(timeUntilExplanation);
+            }
+            setShowExplanation(prev => !prev);
+          }, [showExplanation, explanationViewTime, questionStartTime]);
+
+          const handleSubmit = useCallback(() => {
+            if (!userAnswer) {
+              alert('解答を選択または入力してください');
+              return;
+            }
+            
+            const timeSpent = Math.round((Date.now() - questionStartTime) / 1000);
+            const isCorrectAnswer = checkAnswer(userAnswer, currentQuestion.correctAnswer);
+            
+            setAnswers(prev => ({
+              ...prev,
+              [currentSubQIndex]: {
+                ...prev[currentSubQIndex],
+                submitted: true,
+                correct: isCorrectAnswer,
+                timeSpent: timeSpent,
+                changes: changeCount,
+                usedHint: hintViewTime !== null,
+                usedExplanation: explanationViewTime !== null,
+                hintViewTime: hintViewTime,
+                explanationViewTime: explanationViewTime
+              }
+            }));
+            setSubmitted(true);
+          }, [questionStartTime, userAnswer, currentQuestion, currentSubQIndex, changeCount, hintViewTime, explanationViewTime, checkAnswer]);
+
+          const handleNext = useCallback(() => {
+            if (currentSubQIndex < currentCategory.questions.length - 1) {
+              setCurrentSubQIndex(prev => prev + 1);
+              setSubmitted(false);
+              setShowHint(false);
+              setShowExplanation(false);
+              setQuestionStartTime(Date.now());
+              setChangeCount(0);
+              setHintViewTime(null);
+              setExplanationViewTime(null);
+              window.scrollTo(0, 0);
+            } else {
+              // カテゴリー終了
+              const correctCount = Object.values(answers).filter(a => a.correct).length;
+              const totalCount = currentCategory.questions.length;
+              const wrongQuestions = currentCategory.questions.filter((q, idx) => !answers[idx]?.correct);
+              
+              const avgTime = Object.values(answers).reduce((sum, a) => sum + (a.timeSpent || 0), 0) / totalCount;
+              const slowQuestions = currentCategory.questions
+                .filter((q, idx) => answers[idx]?.timeSpent > avgTime * 1.5)
+                .map((q) => ({
+                  ...q,
+                  timeSpent: answers[currentCategory.questions.indexOf(q)]?.timeSpent
+                }));
+              
+              const hesitatedQuestions = currentCategory.questions.filter((q, idx) => 
+                answers[idx]?.changes >= 2
+              );
+              
+              const hintDependentQuestions = currentCategory.questions.filter((q, idx) => 
+                answers[idx]?.usedHint || answers[idx]?.usedExplanation
+              );
+              
+              const detailedAnswers = Object.keys(answers).map(idx => ({
+                questionNumber: currentCategory.questions[idx].number,
+                question: currentCategory.questions[idx].question,
+                correct: answers[idx].correct,
+                timeSpent: answers[idx].timeSpent,
+                changes: answers[idx].changes,
+                usedHint: answers[idx].usedHint,
+                usedExplanation: answers[idx].usedExplanation,
+              }));
+              
+              const categoryResult = {
+                name: currentCategory.name,
+                total: totalCount,
+                correct: correctCount,
+                wrongQuestions: wrongQuestions,
+                slowQuestions: slowQuestions,
+                hesitatedQuestions: hesitatedQuestions,
+                hintDependentQuestions: hintDependentQuestions,
+                avgTime: Math.round(avgTime),
+                detailedAnswers: detailedAnswers,
+                timestamp: new Date().toISOString()
+              };
+              
+              setAllResults(prev => ({
+                ...prev,
+                [selectedCategory]: categoryResult
+              }));
+              
+              setScreen('categoryAnalysis');
+              generateAIAnalysis(categoryResult);
+              window.scrollTo(0, 0);
+            }
+          }, [currentSubQIndex, currentCategory, answers, selectedCategory]);
+
+          const generateAIAnalysis = (categoryData) => {
+            setLoadingAnalysis(true);
+            
+            setTimeout(() => {
+              const hintUsage = categoryData.detailedAnswers?.filter(a => a.usedHint || a.usedExplanation).length || 0;
+              const hintRate = Math.round((hintUsage / categoryData.total) * 100);
+              
+              const analysis = `【学習パターン分析】
+
+正答率: ${Math.round((categoryData.correct / categoryData.total) * 100)}%
+平均解答時間: ${categoryData.avgTime}秒
+ヒント使用率: ${hintRate}%
+
+${categoryData.slowQuestions?.length > 0 ? `⚠️ 時間がかかった問題が${categoryData.slowQuestions.length}問あります。これらの分野は理解が不十分な可能性があるため、基礎から復習することをお勧めします。
+
+` : ''}${categoryData.hesitatedQuestions?.length > 0 ? `🤔 迷った問題が${categoryData.hesitatedQuestions.length}問あります。知識が曖昧な部分があるため、該当分野の確認問題を繰り返し解きましょう。
+
+` : ''}${hintRate > 50 ? `💡 ヒント使用率が高めです。まずはヒントなしで考える時間を十分に取り、自力で解答する力をつけていきましょう。
+
+` : ''}${categoryData.wrongQuestions?.length > 0 ? `間違えた${categoryData.wrongQuestions.length}問を重点的に復習し、なぜ間違えたのかを理解することが重要です。` : '全問正解です！素晴らしい成績です！'}`;
+
+              setAiAnalysis(analysis);
+              setLoadingAnalysis(false);
+            }, 800);
+          };
+
+          const handleReset = useCallback(() => {
+            setScreen('menu');
+            setSelectedCategory(null);
+            setCurrentSubQIndex(0);
+            setAnswers({});
+            setShowHint(false);
+            setShowExplanation(false);
+            setSubmitted(false);
+            setAiAnalysis('');
+            setQuestionStartTime(Date.now());
+            setChangeCount(0);
+            setHintViewTime(null);
+            setExplanationViewTime(null);
+            window.scrollTo(0, 0);
+          }, []);
+
+          const handleStartCategory = useCallback((categoryId) => {
+            setSelectedCategory(categoryId);
+            setScreen('question');
+            setCurrentSubQIndex(0);
+            setAnswers({});
+            setShowHint(false);
+            setShowExplanation(false);
+            setSubmitted(false);
+            setAiAnalysis('');
+            setQuestionStartTime(Date.now());
+            setChangeCount(0);
+            setHintViewTime(null);
+            setExplanationViewTime(null);
+            window.scrollTo(0, 0);
+          }, []);
+
+          // 進捗計算
+          const totalSubQuestions = currentCategory?.questions.length || 0;
+          const completedSubQuestions = Object.keys(answers).filter(k => answers[k].submitted).length;
+
+          // ===== レンダリング =====
+
+          // メニュー画面
+          if (screen === 'menu') {
+            const completedCategories = Object.keys(allResults).length;
+            const totalCategories = window.categories?.length || 0;
+
+            return (
+              <div className="min-h-screen pb-6">
+                <div className="bg-white rounded-b-3xl shadow-xl p-6 mb-6">
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-3">
+                    古典探求 学習アプリ
+                  </h1>
+                  <p className="text-gray-600">
+                    学習したカテゴリー: {completedCategories} / {totalCategories}
+                  </p>
+                </div>
+
+                <div className="px-4 space-y-4">
+                  {window.categories?.map((category) => {
+                    const result = allResults[category.id];
+                    const percentage = result ? Math.round((result.correct / result.total) * 100) : null;
+
+                    return (
+                      <button
+                        key={category.id}
+                        onClick={() => handleStartCategory(category.id)}
+                        className="w-full bg-white rounded-2xl shadow-md p-5 text-left tap-effect hover:shadow-lg"
+                      >
+                        <h3 className="font-bold text-lg mb-2 text-gray-800">{category.name}</h3>
+                        <p className="text-sm text-gray-600 mb-3">{category.questions.length}問</p>
+                        {result && (
+                          <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                            <span className="text-sm text-gray-600">前回の結果:</span>
+                            <span className={`font-bold text-xl ${
+                              percentage >= 80 ? 'text-green-600' : 
+                              percentage >= 60 ? 'text-yellow-600' : 
+                              'text-red-600'
+                            }`}>
+                              {percentage}点
+                            </span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+
+          // 問題画面
+          if (screen === 'question' && currentQuestion) {
+            return (
+              <div className="min-h-screen pb-6">
+                <div className="bg-white rounded-b-3xl shadow-xl p-6 mb-6 sticky top-0 z-10">
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 mb-2">
+                      進捗: {completedSubQuestions} / {totalSubQuestions}
+                    </p>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+                        style={{ width: `${(completedSubQuestions / totalSubQuestions) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleReset}
+                    className="text-indigo-600 font-semibold tap-effect"
+                  >
+                    ← メニューへ
+                  </button>
+                </div>
+
+                <div className="px-4">
+                  <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">{currentCategory.title}</h2>
+                    
+                    {currentCategory.text && (
+                      <div className="bg-amber-50 p-4 rounded-xl mb-6 border-l-4 border-amber-400">
+                        <p className="text-sm leading-relaxed whitespace-pre-line text-gray-800">
+                          {currentCategory.text}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="border-t-2 border-indigo-100 pt-4">
+                      <h3 className="text-xl font-bold text-indigo-600 mb-4">
+                        問{currentQuestion.number}: {currentQuestion.question}
+                      </h3>
+
+                      {currentQuestion.type === 'choice' ? (
+                        <div className="space-y-3 mb-6">
+                          {currentQuestion.choices.map((choice, idx) => {
+                            const isSelected = userAnswer === choice;
+                            const isCorrectChoice = currentQuestion.correctAnswer.includes(choice);
+                            
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => !isSubmitted && handleAnswer(choice)}
+                                disabled={isSubmitted}
+                                className={`w-full p-4 rounded-xl text-left font-medium tap-effect ${
+                                  isSelected && !isSubmitted ? 'bg-indigo-100 border-2 border-indigo-500' :
+                                  isSelected && isSubmitted && isCorrect ? 'bg-green-100 border-2 border-green-500' :
+                                  isSelected && isSubmitted && !isCorrect ? 'bg-red-100 border-2 border-red-500' :
+                                  isSubmitted && isCorrectChoice ? 'bg-green-50 border-2 border-green-300' :
+                                  'bg-gray-50 border-2 border-gray-200'
+                                }`}
+                              >
+                                {choice}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="mb-6">
+                          <input
+                            type="text"
+                            value={userAnswer || ''}
+                            onChange={(e) => !isSubmitted && handleAnswer(e.target.value)}
+                            disabled={isSubmitted}
+                            placeholder="解答を入力してください"
+                            className="w-full p-4 border-2 border-gray-300 rounded-xl text-lg focus:border-indigo-500 focus:outline-none"
+                          />
+                          {isSubmitted && (
+                            <div className={`mt-3 p-3 rounded-lg ${isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {isCorrect ? '✓ 正解！' : `✗ 不正解　正解: ${Array.isArray(currentQuestion.correctAnswer) ? currentQuestion.correctAnswer[0] : currentQuestion.correctAnswer}`}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-3 mb-6">
+                        <button
+                          onClick={handleHintToggle}
+                          className="bg-yellow-100 text-yellow-800 p-3 rounded-xl font-semibold tap-effect"
+                        >
+                          💡 {showHint ? '小ヒントを非表示' : '小ヒントを見る'}
+                        </button>
+                        
+                        <button
+                          onClick={handleExplanationToggle}
+                          className="bg-blue-100 text-blue-800 p-3 rounded-xl font-semibold tap-effect"
+                        >
+                          📝 {showExplanation ? '大ヒントを非表示' : '大ヒント(解説)'}
+                        </button>
+                      </div>
+
+                      {showHint && (
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-xl mb-4">
+                          <p className="text-sm text-yellow-900">💡 {currentQuestion.hint}</p>
+                        </div>
+                      )}
+
+                      {showExplanation && (
+                        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-xl mb-4">
+                          <p className="text-sm text-blue-900">📝 {currentQuestion.explanation}</p>
+                        </div>
+                      )}
+
+                      {!isSubmitted ? (
+                        <button
+                          onClick={handleSubmit}
+                          disabled={!userAnswer}
+                          className={`w-full p-4 rounded-xl font-bold text-lg tap-effect ${
+                            userAnswer
+                              ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white'
+                              : 'bg-gray-300 text-gray-500'
+                          }`}
+                        >
+                          解答する
+                        </button>
+                      ) : (
+                        <div>
+                          <div className={`p-4 rounded-xl mb-4 border-2 ${
+                            isCorrect ? 'bg-green-100 border-green-500' : 'bg-red-100 border-red-500'
+                          }`}>
+                            <p className="text-2xl font-bold text-center">
+                              {isCorrect ? '✓ 正解！' : '✗ 不正解'}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={handleNext}
+                            className="w-full p-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-bold text-lg tap-effect"
+                          >
+                            {currentSubQIndex < currentCategory.questions.length - 1 
+                              ? '次の問題へ' 
+                              : '結果を見る'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // カテゴリー分析画面
+          if (screen === 'categoryAnalysis') {
+            const result = allResults[selectedCategory];
+            if (!result) return null;
+
+            const percentage = Math.round((result.correct / result.total) * 100);
+
+            return (
+              <div className="min-h-screen pb-6">
+                <div className="px-4 pt-6">
+                  <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                    <h1 className="text-3xl font-bold text-indigo-600 mb-6">カテゴリー結果</h1>
+                    
+                    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl p-8 mb-6 border-2 border-purple-200">
+                      <h3 className="text-lg font-semibold mb-3 text-gray-700">{result.name}</h3>
+                      <p className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600 mb-2">
+                        {percentage}点
+                      </p>
+                      <p className="text-gray-700 text-lg">{result.correct} / {result.total} 問正解</p>
+                      {result.avgTime && (
+                        <p className="text-gray-600 mt-2">平均解答時間: {result.avgTime}秒</p>
+                      )}
+                    </div>
+
+                    {loadingAnalysis ? (
+                      <div className="text-center py-10">
+                        <div className="spinner mx-auto mb-4"></div>
+                        <p className="text-gray-600">AIが詳細分析中...</p>
+                      </div>
+                    ) : (
+                      <div className="bg-purple-50 border-l-4 border-purple-400 p-6 rounded-r-2xl mb-6">
+                        <h4 className="text-xl font-bold text-purple-900 mb-3 flex items-center gap-2">
+                          💡 AI分析
+                        </h4>
+                        <p className="text-purple-900 whitespace-pre-line leading-relaxed">
+                          {aiAnalysis}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={handleReset}
+                        className="p-4 bg-gray-200 text-gray-800 rounded-xl font-bold tap-effect"
+                      >
+                        メニューに戻る
+                      </button>
+                      
+                      <button
+                        onClick={() => handleStartCategory(selectedCategory)}
+                        className="p-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-bold tap-effect"
+                      >
+                        もう一度挑戦
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return null;
+        };
+
+        // ローディング画面を非表示にしてアプリを表示
+        window.addEventListener('load', () => {
+          setTimeout(() => {
+            document.getElementById('loading').style.display = 'none';
+            ReactDOM.render(<StudyApp />, document.getElementById('root'));
+          }, 500);
+        });
+    </script>
+    
+    <!-- Service Worker登録 -->
+    <script>
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+              .then(registration => console.log('SW registered:', registration))
+              .catch(err => console.log('SW registration failed:', err));
+          });
+        }
+        
+        // インストールバナーの表示制御
+        let deferredPrompt;
+        const installBanner = document.getElementById('install-banner');
+        const installButton = document.getElementById('install-button');
+        const dismissButton = document.getElementById('dismiss-install');
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          deferredPrompt = e;
+          
+          // バナーを表示（初回のみ）
+          if (!localStorage.getItem('installDismissed')) {
+            setTimeout(() => {
+              installBanner.style.display = 'block';
+            }, 3000);
+          }
+        });
+        
+        installButton.addEventListener('click', async () => {
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response: ${outcome}`);
+            deferredPrompt = null;
+            installBanner.style.display = 'none';
+          }
+        });
+        
+        dismissButton.addEventListener('click', () => {
+          installBanner.style.display = 'none';
+          localStorage.setItem('installDismissed', 'true');
+        });
+        
+        // インストール済みの場合はバナーを非表示
+        window.addEventListener('appinstalled', () => {
+          installBanner.style.display = 'none';
+        });
+    </script>
+</body>
+</html>

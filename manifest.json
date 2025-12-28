@@ -1,0 +1,27 @@
+{
+  "name": "古典探求 学習アプリ",
+  "short_name": "古典探求",
+  "description": "古典文学を楽しく学べる学習アプリ。全59問の問題でしっかり学習！",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#6366f1",
+  "theme_color": "#6366f1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "books"],
+  "lang": "ja",
+  "dir": "ltr"
+}
